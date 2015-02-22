@@ -3,12 +3,20 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <termios.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
 #ifdef __linux__
   #include <sys/syscall.h> /* ioprio_set */
+#endif
+
+#undef POSIX
+#if (_POSIX_VERSION >= 200112L) /* POSIX.1-2001 */
+  #define POSIX
+  // used to decide whether nice() and tcsetattr() are available
+#endif
+#ifdef POSIX
+  #include <termios.h> /* tcsetattr */
 #endif
 
 #include <time.h>
@@ -19,6 +27,7 @@
 #include <curl/curl.h>
 #include <curl/easy.h>
 
+#undef ERROR
 #define ERROR(...) \
   ({fprintf(stderr, "\n%s: ", progname); \
     fprintf(stderr, __VA_ARGS__); \
@@ -32,6 +41,8 @@
     exit(EXIT_FAILURE); })
 
 #define MIN(a,b) ((a)<(b)?(a):(b))
+#define _ITOA(x) #x
+#define ITOA(x) _ITOA(x)
 
 #ifndef VERSION
   #define VERSION "version unknown"
@@ -39,7 +50,6 @@
 
 #define LINE_LENGTH 80
 #define MAX_RESPONSE_LENGTH 1000
-#define CREAT_MODE S_IWUSR|S_IRUSR|S_IRGRP|S_IROTH
 
 #define VERB_INFO  1
 #define VERB_DEBUG 2
@@ -699,7 +709,9 @@ void keycache_put(const char *fh, const char *keyphrase) {
 }
 
 void fetchKeyphrase() {
+#ifdef POSIX
   struct termios ios0, ios1;
+#endif
   time_t time_ = time(NULL);
   char *date = malloc(9);
   strftime(date, 9, "%Y%m%d", gmtime(&time_));
@@ -723,6 +735,7 @@ void fetchKeyphrase() {
     if (!interactive) ERROR("Password not specified");
     opts.password = malloc(51);
     fputs("Enter your password: ", stderr);
+#ifdef POSIX
     tcgetattr(fileno(ttyfile), &ios0);
     ios1 = ios0;
     ios1.c_lflag &= ~ECHO;
@@ -732,6 +745,11 @@ void fetchKeyphrase() {
       ERROR("Password invalid");
     }
     tcsetattr(fileno(ttyfile), TCSAFLUSH, &ios0);
+#else
+    if (fscanf(ttyfile, "%50s", password) < 1) {
+      ERROR("Password invalid");
+    }
+#endif
     while (fgetc(ttyfile) != '\n');
     fputc('\n', stderr);
   }
@@ -926,7 +944,7 @@ void decryptFile() {
     fd = 1;
   }
   else
-    fd = open(destfilename, O_WRONLY|O_CREAT|O_EXCL, CREAT_MODE);
+    fd = open(destfilename, O_WRONLY|O_CREAT|O_EXCL, 0666);
   if (fd < 0 && errno == EEXIST) {
     if (stat(destfilename, &st) != 0 || S_ISREG(st.st_mode)) {
       if (!interactive) ERROR("Destination file exists: %s", destfilename);
@@ -1128,6 +1146,17 @@ int main(int argc, char *argv[]) {
     }
   }
   
+  if (opts.verbosity >= VERB_DEBUG) {
+    fputs("compile time information:"
+#ifdef POSIX
+        " POSIX." ITOA(_POSIX_VERSION)
+#endif
+#ifdef __linux__
+        " Linux"
+#endif
+        "\n", stderr);
+  }
+
   if (optind >= argc) {
     fprintf(stderr, "Missing argument: otrkey-file\n");
     usageError();
@@ -1161,10 +1190,12 @@ int main(int argc, char *argv[]) {
   }
 
   if (opts.action == ACTION_DECRYPT || opts.action == ACTION_VERIFY) {
-    errno = 0;
-    nice(10);
-    if (errno == 0 && opts.verbosity >= VERB_DEBUG)
-      fputs("NICE was set to 10\n", stderr);
+    #ifdef POSIX
+      errno = 0;
+      nice(10);
+      if (errno == 0 && opts.verbosity >= VERB_DEBUG)
+        fputs("NICE was set to 10\n", stderr);
+    #endif
 
     // Set IONICE using the Linux-specific ioprio_set system call
     // If this causes problems, just delete the ionice-stuff
