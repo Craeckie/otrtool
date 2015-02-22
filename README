@@ -9,14 +9,11 @@ future a download manager and/or EPG could be added.
 
 == BUILDING ==
 
-* execute `make`
+* execute `make` (or `gmake` where GNU Make is not the default)
 
-* Copy the following files to the places they belong:
-    ./otrtool           the main binary
-    ./otrtool.1.gz      the gzip'ed manpage
-    ./LICENSE           the (rights waiver) license
+* `make install` will install binary and manpage in /usr/local
 
-* `make install` will install the binary and the manpage under /usr/local
+* `make install PREFIX=...` can be used to install elsewhere
 
 == LINKS ==
 
