@@ -671,6 +671,9 @@ void keycache_open() {
   strcpy(keyfilename, home);
   strcat(keyfilename, "/.otrkey_cache");
   keyfile = fopen(keyfilename, "a+");
+  if (keyfile == NULL && opts.verbosity >= VERB_DEBUG) {
+    perror("warning: could not open cache file");
+  }
   free(keyfilename);
 }
 
