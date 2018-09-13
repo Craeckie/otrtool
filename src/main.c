@@ -57,6 +57,7 @@ struct otrtool_options {
   char *email;
   char *password;
   char *keyphrase;
+  char *keycachefile;
   char *destdir;
   char *destfile;
 };
@@ -68,6 +69,7 @@ static struct otrtool_options opts = {
   .email = NULL,
   .password = NULL,
   .keyphrase = NULL,
+  .keycachefile = NULL,
   .destdir = NULL,
   .destfile = NULL,
 };
@@ -654,12 +656,16 @@ char * decryptResponse(char *response, int length, void *bigkey) {
 void keycache_open() {
   char *home, *keyfilename;
   
-  if ((home = getenv("HOME")) == NULL) return;
-  keyfilename = malloc(strlen(home) + 20);
-  strcpy(keyfilename, home);
-  strcat(keyfilename, "/.otrkey_cache");
-  keyfile = fopen(keyfilename, "a+");
-  free(keyfilename);
+  if (NULL != opts.keycachefile) {
+     keyfile = fopen(opts.keycachefile, "a+");
+  } else {
+    if ((home = getenv("HOME")) == NULL) return;
+    keyfilename = malloc(strlen(home) + 20);
+    strcpy(keyfilename, home);
+    strcat(keyfilename, "/.otrkey_cache");
+    keyfile = fopen(keyfilename, "a+");
+    free(keyfilename);
+  }
 }
 
 char *keycache_get(const char *fh) {
@@ -1053,7 +1059,7 @@ void usageError() {
   fputs("\n"
     "Usage: otrtool [-h] [-v] [-i|-f|-x|-y] [-u]\n"
     "               [-k <keyphrase>] [-e <email>] [-p <password>]\n"
-    "               [-D <destfolder>] [-O <destfile>]\n"
+    "               [-D <destfolder>] [-O <destfile>] [-C <keycachefile>]\n"
     "               <otrkey-file1> [<otrkey-file2> ... [<otrkey-fileN>]]\n"
     "\n"
     "MODES OF OPERATION\n"
@@ -1064,6 +1070,7 @@ void usageError() {
     "\n"
     "FREQUENTLY USED OPTIONS\n"
     "  -k | Do not fetch keyphrase, use this one\n"
+    "  -C | Store retrieved keyphrases in this file\n"
     "  -D | Output folder\n"
     "  -O | Output file (overrides -D)\n"
     "  -u | Delete otrkey-files after successful decryption\n"
@@ -1076,7 +1083,7 @@ int main(int argc, char *argv[]) {
 
   int i;
   int opt;
-  while ( (opt = getopt(argc, argv, "hvgifxyk:e:p:D:O:u")) != -1) {
+  while ( (opt = getopt(argc, argv, "hvgifxyk:e:p:C:D:O:u")) != -1) {
     switch (opt) {
       case 'h':
         usageError();
@@ -1111,6 +1118,9 @@ int main(int argc, char *argv[]) {
       case 'p':
         opts.password = strdup(optarg);
         memset(optarg, 'x', strlen(optarg));
+        break;
+      case 'C':
+        opts.keycachefile = optarg;
         break;
       case 'D':
         opts.destdir = optarg;
